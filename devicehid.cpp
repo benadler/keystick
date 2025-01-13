@@ -1,56 +1,29 @@
 #include "devicehid.h"
 
+#include <iostream>
+
 #include <errno.h>
 #include <linux/usb/ch9.h>
 #include <stdio.h>
 #include <usbg/function/hid.h>
 #include <usbg/usbg.h>
 
-#include <format>
+#ifndef __cpp_lib_format
+  // std::format polyfill using fmtlib
+  #include <fmt/core.h>
+  namespace std {
+  using fmt::format;
+  }
+#else
+  #include <format>
+#endif
+
 
 #define VENDOR 0x1d6b
 #define PRODUCT 0x0104
 
 // Use http://eleccelerator.com/usbdescreqparser/ to understand report descriptors
-
-#if 0
-// this is for a keyboard, don't want it
-static char report_desc[] = {
-    0x05, 0x01, /* USAGE_PAGE (Generic Desktop)	          */
-    0x09, 0x06, /* USAGE (Keyboard)                       */
-    0xa1, 0x01, /* COLLECTION (Application)               */
-    0x05, 0x07, /*   USAGE_PAGE (Keyboard)                */
-    0x19, 0xe0, /*   USAGE_MINIMUM (Keyboard LeftControl) */
-    0x29, 0xe7, /*   USAGE_MAXIMUM (Keyboard Right GUI)   */
-    0x15, 0x00, /*   LOGICAL_MINIMUM (0)                  */
-    0x25, 0x01, /*   LOGICAL_MAXIMUM (1)                  */
-    0x75, 0x01, /*   REPORT_SIZE (1)                      */
-    0x95, 0x08, /*   REPORT_COUNT (8)                     */
-    0x81, 0x02, /*   INPUT (Data,Var,Abs)                 */
-    0x95, 0x01, /*   REPORT_COUNT (1)                     */
-    0x75, 0x08, /*   REPORT_SIZE (8)                      */
-    0x81, 0x03, /*   INPUT (Cnst,Var,Abs)                 */
-    0x95, 0x05, /*   REPORT_COUNT (5)                     */
-    0x75, 0x01, /*   REPORT_SIZE (1)                      */
-    0x05, 0x08, /*   USAGE_PAGE (LEDs)                    */
-    0x19, 0x01, /*   USAGE_MINIMUM (Num Lock)             */
-    0x29, 0x05, /*   USAGE_MAXIMUM (Kana)                 */
-    0x91, 0x02, /*   OUTPUT (Data,Var,Abs)                */
-    0x95, 0x01, /*   REPORT_COUNT (1)                     */
-    0x75, 0x03, /*   REPORT_SIZE (3)                      */
-    0x91, 0x03, /*   OUTPUT (Cnst,Var,Abs)                */
-    0x95, 0x06, /*   REPORT_COUNT (6)                     */
-    0x75, 0x08, /*   REPORT_SIZE (8)                      */
-    0x15, 0x00, /*   LOGICAL_MINIMUM (0)                  */
-    0x25, 0x65, /*   LOGICAL_MAXIMUM (101)                */
-    0x05, 0x07, /*   USAGE_PAGE (Keyboard)                */
-    0x19, 0x00, /*   USAGE_MINIMUM (Reserved)             */
-    0x29, 0x65, /*   USAGE_MAXIMUM (Keyboard Application) */
-    0x81, 0x00, /*   INPUT (Data,Ary,Abs)                 */
-    0xc0        /* END_COLLECTION                         */
-};
-#endif
-
+// clang-format off
 static uint8_t report_desc[] = {
     0x05, 0x01, // Usage Page (Generic Desktop Ctrls)
     0x09, 0x04, // Usage (Joystick)
@@ -75,26 +48,27 @@ static uint8_t report_desc[] = {
     0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
     0xC0,       // End Collection
 };
+// clang-format on
 static_assert(sizeof(report_desc) == 42, "sizeof() is incorrect!");
 
-DeviceHid::DeviceHid() {
+DeviceHid::DeviceHid(const std::string& name, const size_t numberOfDevices) {
 
     struct usbg_gadget_attrs g_attrs = {
         .bcdUSB = 0x0200,
         // should probably be USB_CLASS_COMM or USB_CLASS_HID
-        .bDeviceClass = USB_CLASS_HID,
-        .bDeviceSubClass = 0x00,
-        .bDeviceProtocol = 0x00,
-        .bMaxPacketSize0 = 64, /* Max allowed ep0 packet size */
+        .bDeviceClass = USB_CLASS_HID, // maybe should be USB_CLASS_MISC
+        .bDeviceSubClass = 0x00,       // maybe should be 0x02
+        .bDeviceProtocol = 0x00,       // maybe should be 0x01
+        .bMaxPacketSize0 = 64, // Max allowed ep0 packet size
         .idVendor = VENDOR,
         .idProduct = PRODUCT,
-        .bcdDevice = 0x0001, /* Version of device */
+        .bcdDevice = 0x0001, // Version of device
     };
 
     struct usbg_gadget_strs g_strs = {
-        .manufacturer = (char *)("Foo Inc."), /* Manufacturer */
-        .product = (char *)("Bar Gadget"),    /* Product string */
-        .serial = (char *)("0123456789")      /* Serial number */
+        .manufacturer = (char *)("Foo Inc."), // Manufacturer
+        .product = (char *)("Bar Gadget"),    // Product string
+        .serial = (char *)("0123456789")      // Serial number
     };
 
     struct usbg_config_strs c_strs = {.configuration = (char *)("1xHID")};
@@ -117,31 +91,47 @@ DeviceHid::DeviceHid() {
                                              usbg_error_name(usbg_error(usbg_err)),
                                              usbg_strerror(usbg_error(usbg_err))));
 
-    usbg_err = usbg_create_gadget(mUsbGadgetState, "g1", &g_attrs, &g_strs, &mUsbGadget);
+    // creates /sys/kernel/config/usb_gadget/${name}/
+    usbg_err = usbg_create_gadget(mUsbGadgetState, name.c_str(), &g_attrs, &g_strs, &mUsbGadget);
     if (usbg_err != USBG_SUCCESS) {
         throw std::runtime_error(std::format("error creating USB gadget: {} {}", usbg_error_name(usbg_error(usbg_err)),
                                              usbg_strerror(usbg_error(usbg_err))));
     }
-    usbg_err = usbg_create_function(mUsbGadget, USBG_F_HID, "usb0", &f_attrs, &mUsbGadgetFunction);
-    if (usbg_err != USBG_SUCCESS)
-        throw std::runtime_error(std::format("error creating USB function: {} {}",
-                                             usbg_error_name(usbg_error(usbg_err)),
-                                             usbg_strerror(usbg_error(usbg_err))));
 
     usbg_err = usbg_create_config(mUsbGadget, 1, "The only one", NULL, &c_strs, &mUsbConfig);
     if (usbg_err != USBG_SUCCESS)
         throw std::runtime_error(std::format("error creating USB config: {} {}", usbg_error_name(usbg_error(usbg_err)),
                                              usbg_strerror(usbg_error(usbg_err))));
 
-    usbg_err = usbg_add_config_function(mUsbConfig, "some_name", mUsbGadgetFunction);
-    if (usbg_err != USBG_SUCCESS)
-        throw std::runtime_error(std::format("error adding USB function: {} {}", usbg_error_name(usbg_error(usbg_err)),
-                                             usbg_strerror(usbg_error(usbg_err))));
+        for(size_t i=0;i<numberOfDevices;i++) {
+            // creates /sys/kernel/config/usb_gadget/${name}/functions/hid.usb${i}
+            mUsbFunctions.push_back(nullptr);
+            const std::string funcInstanceName = std::string("usb") + std::to_string(i);
+            usbg_err = usbg_create_function(mUsbGadget, USBG_F_HID, funcInstanceName.c_str(), &f_attrs, &mUsbFunctions.back());
+            if (usbg_err != USBG_SUCCESS)
+                throw std::runtime_error(std::format("error creating USB function{}: {} {}",
+                                                     i,
+                                                     usbg_error_name(usbg_error(usbg_err)),
+                                                     usbg_strerror(usbg_error(usbg_err))));
+
+            const std::string nameConfFuncBinding = std::string("function") + std::to_string(i);
+            usbg_err = usbg_add_config_function(mUsbConfig, nameConfFuncBinding.c_str(), mUsbFunctions.back());
+            if (usbg_err != USBG_SUCCESS)
+                throw std::runtime_error(std::format("error adding USB function{}: {} {}",
+                                                     i,
+                                                     usbg_error_name(usbg_error(usbg_err)),
+                                                     usbg_strerror(usbg_error(usbg_err))));
+        }
 
     usbg_err = usbg_enable_gadget(mUsbGadget, DEFAULT_UDC);
     if (usbg_err != USBG_SUCCESS)
         throw std::runtime_error(std::format("error enabling USB gadget: {} {}", usbg_error_name(usbg_error(usbg_err)),
                                              usbg_strerror(usbg_error(usbg_err))));
+
+    // Now /sys/kernel/config/usb_gadget/${name}/functions/hid.usb0/dev contains e.g. 236:1,
+    // which matches major/minor device number of a /dev/hidgX device file. I guess that's how we can associate this?
+
+    std::cout << "Succesfully enabled gadget " << name << std::endl;
 }
 
 DeviceHid::~DeviceHid() {
