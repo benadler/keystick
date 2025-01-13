@@ -51,7 +51,17 @@ static uint8_t report_desc[] = {
 // clang-format on
 static_assert(sizeof(report_desc) == 42, "sizeof() is incorrect!");
 
-DeviceHid::DeviceHid(const std::string& name, const size_t numberOfDevices) {
+void check(const int32_t error, const std::string& task, const std::string& hint) {
+    if (error != USBG_SUCCESS)
+        throw std::runtime_error(std::format("error on {}: {} ({})! {}",
+                                             task,
+                                             usbg_error_name(usbg_error(error)),
+                                             usbg_strerror(usbg_error(error)),
+                                             hint));
+    std::cout << "success " << task << std::endl;
+}
+
+void DeviceHid::initialize(const std::string& name, const size_t numberOfDevices) {
 
     struct usbg_gadget_attrs g_attrs = {
         .bcdUSB = 0x0200,
@@ -84,49 +94,23 @@ DeviceHid::DeviceHid(const std::string& name, const size_t numberOfDevices) {
         .subclass = 0,
     };
 
-    int usbg_err;
-    usbg_err = usbg_init("/sys/kernel/config", &mUsbGadgetState);
-    if (usbg_err != USBG_SUCCESS)
-        throw std::runtime_error(std::format("error on usbg init: {} ({}). Maybe need to load gadget kernel module?",
-                                             usbg_error_name(usbg_error(usbg_err)),
-                                             usbg_strerror(usbg_error(usbg_err))));
+    check(usbg_init("/sys/kernel/config", &mUsbGadgetState), "initializing usbg", "Is the kernel module loaded, are you root?");
 
     // creates /sys/kernel/config/usb_gadget/${name}/
-    usbg_err = usbg_create_gadget(mUsbGadgetState, name.c_str(), &g_attrs, &g_strs, &mUsbGadget);
-    if (usbg_err != USBG_SUCCESS) {
-        throw std::runtime_error(std::format("error creating USB gadget: {} {}", usbg_error_name(usbg_error(usbg_err)),
-                                             usbg_strerror(usbg_error(usbg_err))));
+    check(usbg_create_gadget(mUsbGadgetState, name.c_str(), &g_attrs, &g_strs, &mUsbGadget), "creating USB gadget", "");
+
+    check(usbg_create_config(mUsbGadget, 1, "KeyStick", NULL, &c_strs, &mUsbConfig), "creating USB config", "");
+
+    for(size_t i=0; i<numberOfDevices; i++) {
+        // creates /sys/kernel/config/usb_gadget/${name}/functions/hid.usb${i}
+        mUsbFunctions.push_back(nullptr);
+        const std::string funcInstanceName = std::string("usb") + std::to_string(i);
+        check(usbg_create_function(mUsbGadget, USBG_F_HID, funcInstanceName.c_str(), &f_attrs, &mUsbFunctions.back()), "creating USB function","");
+        const std::string nameConfFuncBinding = std::string("function") + std::to_string(i);
+        check(usbg_add_config_function(mUsbConfig, nameConfFuncBinding.c_str(), mUsbFunctions.back()), "adding USB function", "");
     }
 
-    usbg_err = usbg_create_config(mUsbGadget, 1, "The only one", NULL, &c_strs, &mUsbConfig);
-    if (usbg_err != USBG_SUCCESS)
-        throw std::runtime_error(std::format("error creating USB config: {} {}", usbg_error_name(usbg_error(usbg_err)),
-                                             usbg_strerror(usbg_error(usbg_err))));
-
-        for(size_t i=0;i<numberOfDevices;i++) {
-            // creates /sys/kernel/config/usb_gadget/${name}/functions/hid.usb${i}
-            mUsbFunctions.push_back(nullptr);
-            const std::string funcInstanceName = std::string("usb") + std::to_string(i);
-            usbg_err = usbg_create_function(mUsbGadget, USBG_F_HID, funcInstanceName.c_str(), &f_attrs, &mUsbFunctions.back());
-            if (usbg_err != USBG_SUCCESS)
-                throw std::runtime_error(std::format("error creating USB function{}: {} {}",
-                                                     i,
-                                                     usbg_error_name(usbg_error(usbg_err)),
-                                                     usbg_strerror(usbg_error(usbg_err))));
-
-            const std::string nameConfFuncBinding = std::string("function") + std::to_string(i);
-            usbg_err = usbg_add_config_function(mUsbConfig, nameConfFuncBinding.c_str(), mUsbFunctions.back());
-            if (usbg_err != USBG_SUCCESS)
-                throw std::runtime_error(std::format("error adding USB function{}: {} {}",
-                                                     i,
-                                                     usbg_error_name(usbg_error(usbg_err)),
-                                                     usbg_strerror(usbg_error(usbg_err))));
-        }
-
-    usbg_err = usbg_enable_gadget(mUsbGadget, DEFAULT_UDC);
-    if (usbg_err != USBG_SUCCESS)
-        throw std::runtime_error(std::format("error enabling USB gadget: {} {}", usbg_error_name(usbg_error(usbg_err)),
-                                             usbg_strerror(usbg_error(usbg_err))));
+    check(usbg_enable_gadget(mUsbGadget, DEFAULT_UDC), "enabling USB gadget", "");
 
     // Now /sys/kernel/config/usb_gadget/${name}/functions/hid.usb0/dev contains e.g. 236:1,
     // which matches major/minor device number of a /dev/hidgX device file. I guess that's how we can associate this?
@@ -135,6 +119,13 @@ DeviceHid::DeviceHid(const std::string& name, const size_t numberOfDevices) {
 }
 
 DeviceHid::~DeviceHid() {
+    if(mUsbGadget)
+        check(usbg_disable_gadget(mUsbGadget), "disabling USB gadget", "");
+
+    if(mUsbGadget)
+        // Remove gadget with USBG_RM_RECURSE flag to remove also its configurations, functions and strings
+        check(usbg_rm_gadget(mUsbGadget, USBG_RM_RECURSE), "removing USB gadget", "");
+
     if (mUsbGadgetState)
         usbg_cleanup(mUsbGadgetState);
 }

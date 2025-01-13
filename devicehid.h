@@ -20,10 +20,11 @@ class DeviceHid {
     std::vector<usbg_function *> mUsbFunctions;
 
   public:
-    DeviceHid(const std::string& name, const size_t numberOfDevices);
-    ~DeviceHid();
+    DeviceHid() = default;
 
-    // Creates a joystick hid device, like /dev/hidg0.
-    // Returns device if successful, throws if not
-    const std::filesystem::path create();
+    // may throw (e.g. for insufficient kerle support or permissions)
+    void initialize(const std::string& name, const size_t numberOfDevices);
+
+    // Will clean up/remove the gadget
+    ~DeviceHid();
 };
