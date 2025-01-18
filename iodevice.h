@@ -2,6 +2,7 @@
 
 #include "libevdev/libevdev.h"
 #include <filesystem>
+#include <map>
 
 // Eats a keyboard (I) via evdev, creates a joystick (O) via g_hid
 class IoDevice {
@@ -9,6 +10,13 @@ class IoDevice {
 
     int mFdJoystick = 0, mFdKeyboard = 0;
     fd_set mRfds; // not sure what this is yet
+
+    //char mReport[8];
+    struct Switch {
+      bool isPressed = false;
+      uint32_t value = 0;
+    };
+      std::map<uint32_t, Switch> mStatus;
 
     std::filesystem::path mPathKeyboard, mPathJoystick;
 
@@ -25,7 +33,4 @@ class IoDevice {
   private:
     void initJoystick();
     void initKeyboard();
-
-    // creates a new hid device and returns it, for initJoystick() to use
-    //const std::filesystem::path initHid();
 };

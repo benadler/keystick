@@ -66,9 +66,9 @@ void DeviceHid::initialize(const std::string& name, const size_t numberOfDevices
     struct usbg_gadget_attrs g_attrs = {
         .bcdUSB = 0x0200,
         // should probably be USB_CLASS_COMM or USB_CLASS_HID
-        .bDeviceClass = USB_CLASS_HID, // maybe should be USB_CLASS_MISC
-        .bDeviceSubClass = 0x00,       // maybe should be 0x02
-        .bDeviceProtocol = 0x00,       // maybe should be 0x01
+        .bDeviceClass = USB_CLASS_MISC, // maybe should be USB_CLASS_MISC
+        .bDeviceSubClass = 0x02,       // maybe should be 0x02
+        .bDeviceProtocol = 0x01,       // maybe should be 0x01
         .bMaxPacketSize0 = 64, // Max allowed ep0 packet size
         .idVendor = VENDOR,
         .idProduct = PRODUCT,
