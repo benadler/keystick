@@ -8,6 +8,7 @@
 #include <usbg/function/hid.h>
 #include <usbg/usbg.h>
 
+// raspberrypios uses debian, which supports old gcc12, so we need to dance around that.
 #ifndef __cpp_lib_format
   // std::format polyfill using fmtlib
   #include <fmt/core.h>
@@ -18,11 +19,12 @@
   #include <format>
 #endif
 
-
-#define VENDOR 0x1d6b
-#define PRODUCT 0x0104
-
 // Use http://eleccelerator.com/usbdescreqparser/ to understand report descriptors
+//
+// Create a joystick with 2 axes and 8 buttons. Each axis is one byte, 8 buttons are
+// another byte. So we'll be sending a report of 3 bytes everytime the joystick state
+// changes.
+
 // clang-format off
 static uint8_t report_desc[] = {
     0x05, 0x01, // Usage Page (Generic Desktop Ctrls)
@@ -65,20 +67,23 @@ void DeviceHid::initialize(const std::string& name, const size_t numberOfDevices
 
     struct usbg_gadget_attrs g_attrs = {
         .bcdUSB = 0x0200,
-        // should probably be USB_CLASS_COMM or USB_CLASS_HID
-        .bDeviceClass = USB_CLASS_MISC, // maybe should be USB_CLASS_MISC
-        .bDeviceSubClass = 0x02,       // maybe should be 0x02
-        .bDeviceProtocol = 0x01,       // maybe should be 0x01
+        // From https://irq5.io/2016/12/22/raspberry-pi-zero-as-multiple-usb-gadgets/:
+        //   Composite USB devices with multiple functions need to indicate this to Windows by
+        //   using a special class & protocol code.
+        // The next 3 lines do exactly that.
+        .bDeviceClass = USB_CLASS_MISC,
+        .bDeviceSubClass = 0x02,
+        .bDeviceProtocol = 0x01,
         .bMaxPacketSize0 = 64, // Max allowed ep0 packet size
-        .idVendor = VENDOR,
-        .idProduct = PRODUCT,
+        .idVendor = 0x1d6b,
+        .idProduct = 0x0104,
         .bcdDevice = 0x0001, // Version of device
     };
 
     struct usbg_gadget_strs g_strs = {
-        .manufacturer = (char *)("Foo Inc."), // Manufacturer
-        .product = (char *)("Bar Gadget"),    // Product string
-        .serial = (char *)("0123456789")      // Serial number
+        .manufacturer = (char *)("keystick"),
+        .product = (char *)("keyboard2joystick emulator"),
+        .serial = (char *)("0123456789")
     };
 
     struct usbg_config_strs c_strs = {.configuration = (char *)("1xHID")};

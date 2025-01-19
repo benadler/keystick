@@ -10,7 +10,7 @@ struct usbg_function;
 
 // Creates a USB gadget with multiple functions (hidg devices, each of which associated to a joystick seen by windows).
 // Requires https://github.com/linux-usb-gadgets/libusbgx/
-// With a stock kernel, the number of joysticks is limted to 4, see https://unix.stackexchange.com/questions/553957.
+// With a stock kernel, the number of joysticks is limited to 4, see https://unix.stackexchange.com/questions/553957.
 
 class DeviceHid {
     usbg_state *mUsbGadgetState = nullptr;

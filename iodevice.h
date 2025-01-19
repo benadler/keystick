@@ -4,19 +4,14 @@
 #include <filesystem>
 #include <map>
 
-// Eats a keyboard (I) via evdev, creates a joystick (O) via g_hid
+// Admittedly not a very inspired class name, but, IoDevice eats a keyboard's keypressed via evdev (input), then feeds a joystick via g_hid (output).
 class IoDevice {
-    libevdev *mLibevdev = NULL;
 
-    int mFdJoystick = 0, mFdKeyboard = 0;
-    fd_set mRfds; // not sure what this is yet
+    libevdev *mLibevdev = nullptr;
+    int32_t mFdJoystick = 0, mFdKeyboard = 0;
 
-    //char mReport[8];
-    struct Switch {
-      bool isPressed = false;
-      uint32_t value = 0;
-    };
-      std::map<uint32_t, Switch> mStatus;
+    // maps from keyboard key's code to its status (key down is true, key up is false)
+    std::map<uint32_t, bool> mSwitchStatus;
 
     std::filesystem::path mPathKeyboard, mPathJoystick;
 

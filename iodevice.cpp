@@ -24,23 +24,6 @@
   #include <format>
 #endif
 
-#define BUF_LEN 512
-
-void print_event(struct input_event *ev) {
-    if (ev->type == EV_SYN)
-        printf("Event: time %ld.%06ld, ++++++++++++++++++++ %s +++++++++++++++\n", ev->input_event_sec,
-               ev->input_event_usec, libevdev_event_type_get_name(ev->type));
-    else
-        printf("Event: time %ld.%06ld, type %d (%s), code %d (%s), value %d\n", ev->input_event_sec,
-               ev->input_event_usec, ev->type, libevdev_event_type_get_name(ev->type), ev->code,
-               libevdev_event_code_get_name(ev->type, ev->code), ev->value);
-}
-
-void print_sync_event(struct input_event *ev) {
-    printf("SYNC: ");
-    print_event(ev);
-}
-
 IoDevice::IoDevice(const std::filesystem::path &keyboard, const std::filesystem::path &joystick) :
     mPathKeyboard(keyboard),
     mPathJoystick(joystick)
@@ -71,61 +54,6 @@ void IoDevice::initKeyboard() {
     std::cout << mPathKeyboard.filename().string() << " using keyboard fd " << mFdKeyboard << std::endl;
 }
 
-
-struct options {
-	const char    *opt;
-	unsigned char val;
-};
-
-static struct options jmod[] = {
-	{.opt = "--b1",		.val = 0x10},
-	{.opt = "--b2",		.val = 0x20},
-	{.opt = "--b3",		.val = 0x40},
-	{.opt = "--b4",		.val = 0x80},
-	{.opt = "--hat1",	.val = 0x00},
-	{.opt = "--hat2",	.val = 0x01},
-	{.opt = "--hat3",	.val = 0x02},
-	{.opt = "--hat4",	.val = 0x03},
-	{.opt = "--hatneutral",	.val = 0x04},
-	{.opt = NULL}
-};
-
-int joystick_fill_report(char report[8], char buf[BUF_LEN]) {
-    char *tok = strtok(buf, " ");
-    int mvt = 0;
-    int i = 0;
-
-    /* set default hat position: neutral */
-    report[3] = 0x04;
-
-    for (; tok != NULL; tok = strtok(NULL, " ")) {
-
-        if (strcmp(tok, "--quit") == 0)
-            return -1;
-
-        for (i = 0; jmod[i].opt != NULL; i++)
-            if (strcmp(tok, jmod[i].opt) == 0) {
-                report[3] = (report[3] & 0xF0) | jmod[i].val;
-                break;
-            }
-        if (jmod[i].opt != NULL)
-            continue;
-
-        if (!(tok[0] == '-' && tok[1] == '-') && mvt < 3) {
-            errno = 0;
-            report[mvt++] = (char)strtol(tok, NULL, 0);
-            if (errno != 0) {
-                fprintf(stderr, "Bad value:'%s'\n", tok);
-                report[mvt--] = 0;
-            }
-            continue;
-        }
-
-        fprintf(stderr, "unknown option: %s\n", tok);
-    }
-    return 4;
-}
-
 void IoDevice::initJoystick() {
 
     // @path should be e.g. /dev/hidg0, which must already exist!
@@ -146,11 +74,8 @@ void IoDevice::process() {
         rc = libevdev_next_event(mLibevdev, LIBEVDEV_READ_FLAG_NORMAL | LIBEVDEV_READ_FLAG_BLOCKING, &ev);
         if (rc == LIBEVDEV_READ_STATUS_SYNC) {
             std::cout << "SYNC" << std::endl;
-            while (rc == LIBEVDEV_READ_STATUS_SYNC) {
-                print_sync_event(&ev);
+            while (rc == LIBEVDEV_READ_STATUS_SYNC)
                 rc = libevdev_next_event(mLibevdev, LIBEVDEV_READ_FLAG_SYNC, &ev);
-            }
-            printf("::::::::::::::::::::: re-synced ::::::::::::::::::::::\n");
         } else if (rc == LIBEVDEV_READ_STATUS_SUCCESS) {
             if(ev.value == 2) // means key is held down, repeated presses. Ignore.
                 continue;
@@ -161,50 +86,47 @@ void IoDevice::process() {
             if(ev.type == EV_MSC) // Something scancode something?
                 continue;
 
-            std::cout << mPathKeyboard.filename().string() << " at " << ev.input_event_sec << "." << ev.input_event_usec << ": " << ev.type << " evttype " << libevdev_event_type_get_name(ev.type) << " code " << ev.code << " (" << libevdev_event_code_get_name(ev.type, ev.code) << ") value " <<  ev.value << std::endl;
+            // std::cout << mPathKeyboard.filename().string() << " at " << ev.input_event_sec << "." << ev.input_event_usec << ": " << ev.type << " evttype " << libevdev_event_type_get_name(ev.type) << " code " << ev.code << " (" << libevdev_event_code_get_name(ev.type, ev.code) << ") value " <<  ev.value << std::endl;
 
-
-            static const std::set<uint32_t> keys{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_A, KEY_S, KEY_D, KEY_F};
+            static const std::set<uint32_t> keys{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_A, KEY_S, KEY_D, KEY_F, KEY_Z, KEY_X, KEY_C, KEY_V};
             // write joystick!
             if(!keys.contains(ev.code))
                 continue;
 
-            mStatus[ev.code].isPressed = ev.value > 0 ? true : false;
+            mSwitchStatus[ev.code] = ev.value > 0 ? true : false;
 
-            std::cout << mPathKeyboard.filename().string() << " sending key " << libevdev_event_code_get_name(ev.type, ev.code) << (ev.value == 0 ? " UP" : " DOWN") << " to " << mPathJoystick.filename().string() << std::endl;
+            // std::cout << mPathKeyboard.filename().string() << " sending key " << libevdev_event_code_get_name(ev.type, ev.code) << (ev.value == 0 ? " UP" : " DOWN") << " to " << mPathJoystick.filename().string() << std::endl;
 
             int8_t mReport[8];
             memset(mReport, 0x0, sizeof(mReport));
-            if(mStatus[KEY_LEFT].isPressed)
+            if(mSwitchStatus[KEY_LEFT])
                 mReport[0]=-127;
-            else if(mStatus[KEY_RIGHT].isPressed)
+            else if(mSwitchStatus[KEY_RIGHT])
                 mReport[0]=127;
             else
                 mReport[0]=0;
 
-            if(mStatus[KEY_UP].isPressed)
+            if(mSwitchStatus[KEY_UP])
                 mReport[1]=-127;
-            else if(mStatus[KEY_DOWN].isPressed)
+            else if(mSwitchStatus[KEY_DOWN])
                 mReport[1]=127;
             else
                 mReport[1]=0;
 
-            static const std::vector<uint32_t> buttons{KEY_F, KEY_D, KEY_S, KEY_A};
+            static const std::vector<uint32_t> buttons{KEY_F, KEY_D, KEY_S, KEY_A, KEY_V, KEY_C, KEY_X, KEY_Z};
             for(size_t i = 0; i < buttons.size(); i++)
-                if(mStatus[buttons[i]].isPressed)
+                if(mSwitchStatus[buttons[i]])
                     mReport[2] |= 0x01 << i;
                 else
                     mReport[2] &= ~(0x01 << i);
 
             if (write(mFdJoystick, mReport, 3) != 3)
                 throw std::runtime_error(std::format("write on {} failed: {}", mPathJoystick.string(), strerror(errno)));
-            std::cout << "done writing" << std::endl;
         }
-
     } while (rc == LIBEVDEV_READ_STATUS_SYNC || rc == LIBEVDEV_READ_STATUS_SUCCESS || rc == -EAGAIN);
 
     if (rc != LIBEVDEV_READ_STATUS_SUCCESS && rc != -EAGAIN)
-        fprintf(stderr, "Failed to handle events: %s\n", strerror(-rc));
+        throw std::runtime_error(std::format("failed to handle events: {}", strerror(-rc)));
 }
 
 

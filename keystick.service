@@ -1,0 +1,8 @@
+[Unit]
+Description=keystick - emulates a joystick on upstram facing USB ports for every connected keyboard
+
+[Service]
+ExecStart=/usr/local/bin/keystick
+
+[Install]
+WantedBy=multi-user.target

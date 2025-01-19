@@ -24,9 +24,8 @@ void signalHandler(int signal)
 
 int main(int argc, char **argv) {
 
+    // shutdown/cleanup is pretty.. creative, but it works. THe only thing that matters is that DeviceHid's dtor is called, so the gadget gets removed. Else we'd have to reboot between runs.
     std::signal(SIGINT, signalHandler);
-
-    std::cout << "main function" << std::endl;
 
     try {
         // Iterate input devices, check which ones are real keyboards
