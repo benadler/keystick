@@ -4,7 +4,8 @@
 #include <filesystem>
 #include <map>
 
-// Admittedly not a very inspired class name, but, IoDevice eats a keyboard's keypressed via evdev (input), then feeds a joystick via g_hid (output).
+// Admittedly not a very inspired class name, but, IoDevice eats a keyboard's keypressed via evdev (input), then feeds a
+// joystick via g_hid (output).
 class IoDevice {
 
     libevdev *mLibevdev = nullptr;

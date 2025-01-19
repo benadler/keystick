@@ -10,13 +10,13 @@
 
 // raspberrypios uses debian, which supports old gcc12, so we need to dance around that.
 #ifndef __cpp_lib_format
-  // std::format polyfill using fmtlib
-  #include <fmt/core.h>
-  namespace std {
-  using fmt::format;
-  }
+// std::format polyfill using fmtlib
+#include <fmt/core.h>
+namespace std {
+using fmt::format;
+}
 #else
-  #include <format>
+#include <format>
 #endif
 
 // Use http://eleccelerator.com/usbdescreqparser/ to understand report descriptors
@@ -53,17 +53,14 @@ static uint8_t report_desc[] = {
 // clang-format on
 static_assert(sizeof(report_desc) == 42, "sizeof() is incorrect!");
 
-void check(const int32_t error, const std::string& task, const std::string& hint) {
+void check(const int32_t error, const std::string &task, const std::string &hint) {
     if (error != USBG_SUCCESS)
-        throw std::runtime_error(std::format("error on {}: {} ({})! {}",
-                                             task,
-                                             usbg_error_name(usbg_error(error)),
-                                             usbg_strerror(usbg_error(error)),
-                                             hint));
+        throw std::runtime_error(std::format("error on {}: {} ({})! {}", task, usbg_error_name(usbg_error(error)),
+                                             usbg_strerror(usbg_error(error)), hint));
     std::cout << "success " << task << std::endl;
 }
 
-void DeviceHid::initialize(const std::string& name, const size_t numberOfDevices) {
+void DeviceHid::initialize(const std::string &name, const size_t numberOfDevices) {
 
     struct usbg_gadget_attrs g_attrs = {
         .bcdUSB = 0x0200,
@@ -80,11 +77,9 @@ void DeviceHid::initialize(const std::string& name, const size_t numberOfDevices
         .bcdDevice = 0x0001, // Version of device
     };
 
-    struct usbg_gadget_strs g_strs = {
-        .manufacturer = (char *)("keystick"),
-        .product = (char *)("keyboard2joystick emulator"),
-        .serial = (char *)("0123456789")
-    };
+    struct usbg_gadget_strs g_strs = {.manufacturer = (char *)("keystick"),
+                                      .product = (char *)("keyboard2joystick emulator"),
+                                      .serial = (char *)("0123456789")};
 
     struct usbg_config_strs c_strs = {.configuration = (char *)("1xHID")};
 
@@ -99,20 +94,23 @@ void DeviceHid::initialize(const std::string& name, const size_t numberOfDevices
         .subclass = 0,
     };
 
-    check(usbg_init("/sys/kernel/config", &mUsbGadgetState), "initializing usbg", "Is the kernel module loaded, are you root?");
+    check(usbg_init("/sys/kernel/config", &mUsbGadgetState), "initializing usbg",
+          "Is the kernel module loaded, are you root?");
 
     // creates /sys/kernel/config/usb_gadget/${name}/
     check(usbg_create_gadget(mUsbGadgetState, name.c_str(), &g_attrs, &g_strs, &mUsbGadget), "creating USB gadget", "");
 
     check(usbg_create_config(mUsbGadget, 1, "KeyStick", NULL, &c_strs, &mUsbConfig), "creating USB config", "");
 
-    for(size_t i=0; i<numberOfDevices; i++) {
+    for (size_t i = 0; i < numberOfDevices; i++) {
         // creates /sys/kernel/config/usb_gadget/${name}/functions/hid.usb${i}
         mUsbFunctions.push_back(nullptr);
         const std::string funcInstanceName = std::string("usb") + std::to_string(i);
-        check(usbg_create_function(mUsbGadget, USBG_F_HID, funcInstanceName.c_str(), &f_attrs, &mUsbFunctions.back()), "creating USB function","");
+        check(usbg_create_function(mUsbGadget, USBG_F_HID, funcInstanceName.c_str(), &f_attrs, &mUsbFunctions.back()),
+              "creating USB function", "");
         const std::string nameConfFuncBinding = std::string("function") + std::to_string(i);
-        check(usbg_add_config_function(mUsbConfig, nameConfFuncBinding.c_str(), mUsbFunctions.back()), "adding USB function", "");
+        check(usbg_add_config_function(mUsbConfig, nameConfFuncBinding.c_str(), mUsbFunctions.back()),
+              "adding USB function", "");
     }
 
     check(usbg_enable_gadget(mUsbGadget, DEFAULT_UDC), "enabling USB gadget", "");
@@ -124,10 +122,10 @@ void DeviceHid::initialize(const std::string& name, const size_t numberOfDevices
 }
 
 DeviceHid::~DeviceHid() {
-    if(mUsbGadget)
+    if (mUsbGadget)
         check(usbg_disable_gadget(mUsbGadget), "disabling USB gadget", "");
 
-    if(mUsbGadget)
+    if (mUsbGadget)
         // Remove gadget with USBG_RM_RECURSE flag to remove also its configurations, functions and strings
         check(usbg_rm_gadget(mUsbGadget, USBG_RM_RECURSE), "removing USB gadget", "");
 

@@ -1,6 +1,5 @@
 #include "iodevice.h"
 
-
 #include <iostream>
 #include <set>
 #include <vector>
@@ -15,19 +14,17 @@
 #include <sys/types.h>
 
 #ifndef __cpp_lib_format
-  // std::format polyfill using fmtlib
-  #include <fmt/core.h>
-  namespace std {
-  using fmt::format;
-  }
+// std::format polyfill using fmtlib
+#include <fmt/core.h>
+namespace std {
+using fmt::format;
+}
 #else
-  #include <format>
+#include <format>
 #endif
 
-IoDevice::IoDevice(const std::filesystem::path &keyboard, const std::filesystem::path &joystick) :
-    mPathKeyboard(keyboard),
-    mPathJoystick(joystick)
-{
+IoDevice::IoDevice(const std::filesystem::path &keyboard, const std::filesystem::path &joystick)
+    : mPathKeyboard(keyboard), mPathJoystick(joystick) {
     initKeyboard();
     initJoystick();
 }
@@ -45,11 +42,13 @@ void IoDevice::initKeyboard() {
 
     mFdKeyboard = open(mPathKeyboard.c_str(), O_RDONLY);
     if (mFdKeyboard < 0)
-        throw std::runtime_error(std::format("the given file {} could not be opened. Running as root?", mPathKeyboard.string()));
+        throw std::runtime_error(
+            std::format("the given file {} could not be opened. Running as root?", mPathKeyboard.string()));
 
     int rc = libevdev_new_from_fd(mFdKeyboard, &mLibevdev);
     if (rc < 0)
-        throw std::runtime_error(std::format("failed to initialize evdev on file {}: {}", mPathKeyboard.string(), strerror(-rc)));
+        throw std::runtime_error(
+            std::format("failed to initialize evdev on file {}: {}", mPathKeyboard.string(), strerror(-rc)));
 
     std::cout << mPathKeyboard.filename().string() << " using keyboard fd " << mFdKeyboard << std::endl;
 }
@@ -59,11 +58,12 @@ void IoDevice::initJoystick() {
     // @path should be e.g. /dev/hidg0, which must already exist!
 
     if (!std::filesystem::exists(mPathJoystick))
-        throw std::runtime_error(std::format("the given joystick hidg device file {} does not exist", mPathJoystick.string()));
+        throw std::runtime_error(
+            std::format("the given joystick hidg device file {} does not exist", mPathJoystick.string()));
 
     if ((mFdJoystick = open(mPathJoystick.c_str(), O_RDWR, 0666)) == -1)
-        throw std::runtime_error(std::format("the given file {} could not be opened. Running as root?", mPathJoystick.string()));
-
+        throw std::runtime_error(
+            std::format("the given file {} could not be opened. Running as root?", mPathJoystick.string()));
 }
 
 void IoDevice::process() {
@@ -77,58 +77,64 @@ void IoDevice::process() {
             while (rc == LIBEVDEV_READ_STATUS_SYNC)
                 rc = libevdev_next_event(mLibevdev, LIBEVDEV_READ_FLAG_SYNC, &ev);
         } else if (rc == LIBEVDEV_READ_STATUS_SUCCESS) {
-            if(ev.value == 2) // means key is held down, repeated presses. Ignore.
+            if (ev.value == 2) // means key is held down, repeated presses. Ignore.
                 continue;
 
-            if(ev.type == EV_SYN) // What's a SYN_REPORT?
+            if (ev.type == EV_SYN) // What's a SYN_REPORT?
                 continue;
 
-            if(ev.type == EV_MSC) // Something scancode something?
+            if (ev.type == EV_MSC) // Something scancode something?
                 continue;
 
-            // std::cout << mPathKeyboard.filename().string() << " at " << ev.input_event_sec << "." << ev.input_event_usec << ": " << ev.type << " evttype " << libevdev_event_type_get_name(ev.type) << " code " << ev.code << " (" << libevdev_event_code_get_name(ev.type, ev.code) << ") value " <<  ev.value << std::endl;
+            // std::cout << mPathKeyboard.filename().string() << " at " << ev.input_event_sec << "." <<
+            // ev.input_event_usec << ": " << ev.type << " evttype " << libevdev_event_type_get_name(ev.type) << " code
+            // " << ev.code << " (" << libevdev_event_code_get_name(ev.type, ev.code) << ") value " <<  ev.value <<
+            // std::endl;
 
-            static const std::set<uint32_t> keys{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_A, KEY_S, KEY_D, KEY_F, KEY_Z, KEY_X, KEY_C, KEY_V};
+            static const std::set<uint32_t> keys{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_A, KEY_S,
+                                                 KEY_D,  KEY_F,    KEY_Z,    KEY_X,     KEY_C, KEY_V};
             // write joystick!
-            if(!keys.contains(ev.code))
+            if (!keys.contains(ev.code))
                 continue;
 
             mSwitchStatus[ev.code] = ev.value > 0 ? true : false;
 
-            // std::cout << mPathKeyboard.filename().string() << " sending key " << libevdev_event_code_get_name(ev.type, ev.code) << (ev.value == 0 ? " UP" : " DOWN") << " to " << mPathJoystick.filename().string() << std::endl;
+            // std::cout << mPathKeyboard.filename().string() << " sending key " <<
+            // libevdev_event_code_get_name(ev.type, ev.code) << (ev.value == 0 ? " UP" : " DOWN") << " to " <<
+            // mPathJoystick.filename().string() << std::endl;
 
             int8_t mReport[8];
             memset(mReport, 0x0, sizeof(mReport));
-            if(mSwitchStatus[KEY_LEFT])
-                mReport[0]=-127;
-            else if(mSwitchStatus[KEY_RIGHT])
-                mReport[0]=127;
+            if (mSwitchStatus[KEY_LEFT])
+                mReport[0] = -127;
+            else if (mSwitchStatus[KEY_RIGHT])
+                mReport[0] = 127;
             else
-                mReport[0]=0;
+                mReport[0] = 0;
 
-            if(mSwitchStatus[KEY_UP])
-                mReport[1]=-127;
-            else if(mSwitchStatus[KEY_DOWN])
-                mReport[1]=127;
+            if (mSwitchStatus[KEY_UP])
+                mReport[1] = -127;
+            else if (mSwitchStatus[KEY_DOWN])
+                mReport[1] = 127;
             else
-                mReport[1]=0;
+                mReport[1] = 0;
 
             static const std::vector<uint32_t> buttons{KEY_F, KEY_D, KEY_S, KEY_A, KEY_V, KEY_C, KEY_X, KEY_Z};
-            for(size_t i = 0; i < buttons.size(); i++)
-                if(mSwitchStatus[buttons[i]])
+            for (size_t i = 0; i < buttons.size(); i++)
+                if (mSwitchStatus[buttons[i]])
                     mReport[2] |= 0x01 << i;
                 else
                     mReport[2] &= ~(0x01 << i);
 
             if (write(mFdJoystick, mReport, 3) != 3)
-                throw std::runtime_error(std::format("write on {} failed: {}", mPathJoystick.string(), strerror(errno)));
+                throw std::runtime_error(
+                    std::format("write on {} failed: {}", mPathJoystick.string(), strerror(errno)));
         }
     } while (rc == LIBEVDEV_READ_STATUS_SYNC || rc == LIBEVDEV_READ_STATUS_SUCCESS || rc == -EAGAIN);
 
     if (rc != LIBEVDEV_READ_STATUS_SUCCESS && rc != -EAGAIN)
         throw std::runtime_error(std::format("failed to handle events: {}", strerror(-rc)));
 }
-
 
 bool IoDevice::isKeyboard(const std::filesystem::path &path) {
 
@@ -150,7 +156,8 @@ bool IoDevice::isKeyboard(const std::filesystem::path &path) {
 
     int rc = libevdev_new_from_fd(fd, &libevdev);
     if (rc < 0)
-        throw std::runtime_error(std::format("failed to initialize evdev on file {}: {}", path.string(), strerror(-rc)));
+        throw std::runtime_error(
+            std::format("failed to initialize evdev on file {}: {}", path.string(), strerror(-rc)));
 
     // until std::experimental::scope_exit is available...
     std::shared_ptr<int> x(NULL, [&](int *) {
@@ -165,7 +172,7 @@ bool IoDevice::isKeyboard(const std::filesystem::path &path) {
     if (!libevdev_has_event_type(libevdev, EV_KEY))
         return false;
 
-    for(const uint32_t& key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_A, KEY_S, KEY_D, KEY_F})
+    for (const uint32_t &key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_A, KEY_S, KEY_D, KEY_F})
         if (!libevdev_has_event_code(libevdev, EV_KEY, key))
             return false;
 

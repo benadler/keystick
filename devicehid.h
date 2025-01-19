@@ -23,7 +23,7 @@ class DeviceHid {
     DeviceHid() = default;
 
     // may throw (e.g. for insufficient kerle support or permissions)
-    void initialize(const std::string& name, const size_t numberOfDevices);
+    void initialize(const std::string &name, const size_t numberOfDevices);
 
     // Will clean up/remove the gadget
     ~DeviceHid();
