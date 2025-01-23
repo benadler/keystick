@@ -62,6 +62,8 @@ void check(const int32_t error, const std::string &task, const std::string &hint
 
 void DeviceHid::initialize(const std::string &name, const size_t numberOfDevices) {
 
+    std::cout << "Initializing " << numberOfDevices << " HID devices...";
+
     struct usbg_gadget_attrs g_attrs = {
         .bcdUSB = 0x0200,
         // From https://irq5.io/2016/12/22/raspberry-pi-zero-as-multiple-usb-gadgets/:
@@ -107,10 +109,10 @@ void DeviceHid::initialize(const std::string &name, const size_t numberOfDevices
         mUsbFunctions.push_back(nullptr);
         const std::string funcInstanceName = std::string("usb") + std::to_string(i);
         check(usbg_create_function(mUsbGadget, USBG_F_HID, funcInstanceName.c_str(), &f_attrs, &mUsbFunctions.back()),
-              "creating USB function", "");
+              std::format("creating USB function {}", i), "");
         const std::string nameConfFuncBinding = std::string("function") + std::to_string(i);
         check(usbg_add_config_function(mUsbConfig, nameConfFuncBinding.c_str(), mUsbFunctions.back()),
-              "adding USB function", "");
+              std::format("adding USB function {}", i), "");
     }
 
     check(usbg_enable_gadget(mUsbGadget, DEFAULT_UDC), "enabling USB gadget", "");
