@@ -11,7 +11,7 @@ flowchart LR
     C -->|upstream-facing USB port| D(Windows machine)
 ```
 
-This program is intended to run on a raspberry pi (tested on a pi4). Connect as many keyboards as you need, then power up the pi and let keystick.service start the keystick binary. The program will then use libevdev to enumerate attached keyboards and use libusbgx to create a virtual joystick for each using the linux USB Gagdet API.
+This program is intended to run on a raspberry pi (tested on both pi4 and pi5). Connect as many keyboards as you need, then power up the pi and let keystick.service start the keystick binary. The program will then use libevdev to enumerate attached keyboards and use libusbgx to create a virtual joystick for each using the linux USB Gagdet API.
 
 # motivation
 
