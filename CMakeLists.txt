@@ -19,7 +19,7 @@ find_package(fmt REQUIRED)
 
 add_executable(keystick
     keystick.cpp
-    iodevice.cpp
+    keyboardjoystick.cpp
     devicehid.cpp)
 
 target_include_directories(${PROJECT_NAME}

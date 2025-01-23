@@ -21,15 +21,21 @@ using fmt::format;
 
 // Use http://eleccelerator.com/usbdescreqparser/ to understand report descriptors
 //
+// https://blog.damnsoft.org/usb-adventures-part-2-custom-hid-and-usb-composite-devices/
+// explains how to format this for multiple (composite0 devices. Essentially, concatenate
+// N report structs, but overwrite REPORT_ID to make it unique. Then the first byte in
+// each report should match the devices report ID. Easy peasy.
+//
 // Create a joystick with 2 axes and 8 buttons. Each axis is one byte, 8 buttons are
 // another byte. So we'll be sending a report of 3 bytes everytime the joystick state
 // changes.
 
 // clang-format off
-static uint8_t report_desc[] = {
+static uint8_t reportDescriptorTemplate[] = {
     0x05, 0x01, // Usage Page (Generic Desktop Ctrls)
     0x09, 0x04, // Usage (Joystick)
     0xA1, 0x01, // Collection (Application)
+    0x85, 0x01, // REPORT_ID (overwrite this with device index)
     0x15, 0x81, //   Logical Minimum (-127)
     0x25, 0x7F, //   Logical Maximum (127)
     0x09, 0x01, //   Usage (Pointer)
@@ -51,7 +57,7 @@ static uint8_t report_desc[] = {
     0xC0,       // End Collection
 };
 // clang-format on
-static_assert(sizeof(report_desc) == 42, "sizeof() is incorrect!");
+static_assert(sizeof(reportDescriptorTemplate) == 44, "sizeof() is incorrect!");
 
 void check(const int32_t error, const std::string &task, const std::string &hint) {
     if (error != USBG_SUCCESS)
@@ -85,12 +91,19 @@ void DeviceHid::initialize(const std::string &name, const size_t numberOfDevices
 
     struct usbg_config_strs c_strs = {.configuration = (char *)("1xHID")};
 
+    std::vector<uint8_t> reportDescriptor(sizeof(reportDescriptorTemplate) * numberOfDevices, 0);
+    for (size_t i = 0; i < numberOfDevices; i++) {
+        memcpy(reinterpret_cast<void *>(&reportDescriptor.data()[i * sizeof(reportDescriptorTemplate)]),
+               reportDescriptorTemplate, sizeof(reportDescriptorTemplate));
+        reportDescriptor.data()[i * sizeof(reportDescriptorTemplate) + 7] = i + 1;
+    }
+
     struct usbg_f_hid_attrs f_attrs = {
         .protocol = 1,
         .report_desc =
             {
-                .desc = reinterpret_cast<char *>(report_desc),
-                .len = sizeof(report_desc),
+                .desc = reinterpret_cast<char *>(reportDescriptor.data()),
+                .len = uint32_t(reportDescriptor.size()),
             },
         .report_length = 8,
         .subclass = 0,
@@ -104,23 +117,19 @@ void DeviceHid::initialize(const std::string &name, const size_t numberOfDevices
 
     check(usbg_create_config(mUsbGadget, 1, "KeyStick", NULL, &c_strs, &mUsbConfig), "creating USB config", "");
 
-    for (size_t i = 0; i < numberOfDevices; i++) {
-        // creates /sys/kernel/config/usb_gadget/${name}/functions/hid.usb${i}
-        mUsbFunctions.push_back(nullptr);
-        const std::string funcInstanceName = std::string("usb") + std::to_string(i);
-        check(usbg_create_function(mUsbGadget, USBG_F_HID, funcInstanceName.c_str(), &f_attrs, &mUsbFunctions.back()),
-              std::format("creating USB function {}", i), "");
-        const std::string nameConfFuncBinding = std::string("function") + std::to_string(i);
-        check(usbg_add_config_function(mUsbConfig, nameConfFuncBinding.c_str(), mUsbFunctions.back()),
-              std::format("adding USB function {}", i), "");
-    }
+    // creates /sys/kernel/config/usb_gadget/${name}/functions/hid.usb${i}
+    mUsbFunctions.push_back(nullptr);
+    check(usbg_create_function(mUsbGadget, USBG_F_HID, "keystick_usbfunction", &f_attrs, &mUsbFunctions.back()),
+          "creating USB function", "");
+    check(usbg_add_config_function(mUsbConfig, "keystick_usbconfigfunction", mUsbFunctions.back()),
+          "adding USB function", "");
 
     check(usbg_enable_gadget(mUsbGadget, DEFAULT_UDC), "enabling USB gadget", "");
 
     // Now /sys/kernel/config/usb_gadget/${name}/functions/hid.usb0/dev contains e.g. 236:1,
     // which matches major/minor device number of a /dev/hidgX device file. I guess that's how we can associate this?
 
-    std::cout << "Succesfully enabled gadget " << name << std::endl;
+    std::cout << "Succesfully enabled gadget " << name << " with " << numberOfDevices << "joysticks" << std::endl;
 }
 
 DeviceHid::~DeviceHid() {

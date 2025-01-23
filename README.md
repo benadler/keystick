@@ -15,11 +15,9 @@ This program is intended to run on a raspberry pi (tested on a pi4). Connect as 
 
 # motivation
 
-I like playing Atomic Bomberman.
-
 [![YouTube](http://i.ytimg.com/vi/sibYEfad1aQ/hqdefault.jpg)](https://www.youtube.com/watch?v=sibYEfad1aQ?t=43)
 
-Unfortunately, it only supports 2 players using keyboards, while the remaining players have to use joysticks. Usually, there are way more keyboards than joysticks around, and even if not, using joysticks for Bomberman sucks.
+I like playing Atomic Bomberman. Unfortunately, it only supports 2 players using keyboards, while the remaining players have to use joysticks. Usually, there are way more keyboards than joysticks around, and even if not, using joysticks for Bomberman sucks.
 
 # installation (from memory...)
 
@@ -33,7 +31,7 @@ Unfortunately, it only supports 2 players using keyboards, while the remaining p
 
 Connect all keyboards and then power up the pi; `keystick` can't deal with keyboards (dis)connecting during runtime, they all have to be static after startup.
 
-Each joystick has 2 axes which are controlled by a keyboard's arrow keys and 8 buttons controlled using - in order - `F`, `D`, `S`, `A`, `V`, `C`, `X`, `Z` keys. If you want to change that, modify `devicehid.cpp` to advertise more/less axes/buttons *and* `iodevice.cpp` to report the key-changes properly.
+Each joystick has 2 axes which are controlled by a keyboard's arrow keys and 8 buttons controlled using - in order - `F`, `D`, `S`, `A`, `V`, `C`, `X`, `Z` keys. If you want to change that, modify `devicehid.cpp` to advertise more/less axes/buttons *and* `keyboardjoystick.cpp` to report the key-changes properly.
 
 # related tools
 
@@ -43,7 +41,6 @@ Each joystick has 2 axes which are controlled by a keyboard's arrow keys and 8 b
 
 # limitations
 
-- With a stock kernel, the number of joysticks is limited to 4, see https://unix.stackexchange.com/questions/553957. "Change a value of HIDG_MINORS in /usr/src/linux-$(uname -r)/drivers/usb/gadget/function/f_hid.c" and recompile the kernel to fix that.
 - Since a raspberry pi 4 is powered through the same USB port that's connected to the upstream machine, that'll have to supply enough current. I haven't run into issues, but maybe something like https://www.elmorlabs.com/product/usb-c-power-data-switch-for-raspberry-pi-4/ could be required.
 
 # license

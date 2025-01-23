@@ -1,4 +1,4 @@
-#include "iodevice.h"
+#include "keyboardjoystick.h"
 
 #include <iostream>
 #include <set>
@@ -23,19 +23,18 @@ using fmt::format;
 #include <format>
 #endif
 
-IoDevice::IoDevice(const std::filesystem::path &keyboard, const std::filesystem::path &joystick)
-    : mPathKeyboard(keyboard), mPathJoystick(joystick) {
+KeyboardJoystick::KeyboardJoystick(const std::filesystem::path &keyboard,
+                                   std::function<void(std::array<uint8_t, 4>)> callback)
+    : mPathKeyboard(keyboard), mCallback(callback) {
     initKeyboard();
-    initJoystick();
 }
 
-IoDevice::~IoDevice() {
+KeyboardJoystick::~KeyboardJoystick() {
     libevdev_free(mLibevdev);
-    close(mFdJoystick);
     close(mFdKeyboard);
 }
 
-void IoDevice::initKeyboard() {
+void KeyboardJoystick::initKeyboard() {
 
     if (!std::filesystem::exists(mPathKeyboard))
         throw std::runtime_error(std::format("the given keyboard file {} does not exist", mPathKeyboard.string()));
@@ -50,23 +49,10 @@ void IoDevice::initKeyboard() {
         throw std::runtime_error(
             std::format("failed to initialize evdev on file {}: {}", mPathKeyboard.string(), strerror(-rc)));
 
-    std::cout << mPathKeyboard.filename().string() << " using keyboard fd " << mFdKeyboard << std::endl;
+    // std::cout << "Keyboard at " << mPathKeyboard.filename().string() << " using fd " << mFdKeyboard << std::endl;
 }
 
-void IoDevice::initJoystick() {
-
-    // @path should be e.g. /dev/hidg0, which must already exist!
-
-    if (!std::filesystem::exists(mPathJoystick))
-        throw std::runtime_error(
-            std::format("the given joystick hidg device file {} does not exist", mPathJoystick.string()));
-
-    if ((mFdJoystick = open(mPathJoystick.c_str(), O_RDWR, 0666)) == -1)
-        throw std::runtime_error(
-            std::format("the given file {} could not be opened. Running as root?", mPathJoystick.string()));
-}
-
-void IoDevice::process() {
+void KeyboardJoystick::process() {
 
     int rc = 0;
     do {
@@ -103,32 +89,32 @@ void IoDevice::process() {
             // libevdev_event_code_get_name(ev.type, ev.code) << (ev.value == 0 ? " UP" : " DOWN") << " to " <<
             // mPathJoystick.filename().string() << std::endl;
 
-            int8_t mReport[8];
-            memset(mReport, 0x0, sizeof(mReport));
+            std::array<uint8_t, 4> report;
+
+            report[0] = 0;
+
             if (mSwitchStatus[KEY_LEFT])
-                mReport[0] = -127;
+                report[1] = uint8_t(-127);
             else if (mSwitchStatus[KEY_RIGHT])
-                mReport[0] = 127;
+                report[1] = uint8_t(127);
             else
-                mReport[0] = 0;
+                report[1] = 0;
 
             if (mSwitchStatus[KEY_UP])
-                mReport[1] = -127;
+                report[2] = uint8_t(-127);
             else if (mSwitchStatus[KEY_DOWN])
-                mReport[1] = 127;
+                report[2] = uint8_t(127);
             else
-                mReport[1] = 0;
+                report[2] = 0;
 
             static const std::vector<uint32_t> buttons{KEY_F, KEY_D, KEY_S, KEY_A, KEY_V, KEY_C, KEY_X, KEY_Z};
             for (size_t i = 0; i < buttons.size(); i++)
                 if (mSwitchStatus[buttons[i]])
-                    mReport[2] |= 0x01 << i;
+                    report[3] |= 0x01 << i;
                 else
-                    mReport[2] &= ~(0x01 << i);
+                    report[3] &= ~(0x01 << i);
 
-            if (write(mFdJoystick, mReport, 3) != 3)
-                throw std::runtime_error(
-                    std::format("write on {} failed: {}", mPathJoystick.string(), strerror(errno)));
+            mCallback(report); // tell the outside, to be sent to the hidg device
         }
     } while (rc == LIBEVDEV_READ_STATUS_SYNC || rc == LIBEVDEV_READ_STATUS_SUCCESS || rc == -EAGAIN);
 
@@ -136,7 +122,7 @@ void IoDevice::process() {
         throw std::runtime_error(std::format("failed to handle events: {}", strerror(-rc)));
 }
 
-bool IoDevice::isKeyboard(const std::filesystem::path &path) {
+bool KeyboardJoystick::isKeyboard(const std::filesystem::path &path) {
 
     // For now, a device is a keyboard if it matches all of these criteria:
     // - has EV_REP event type
